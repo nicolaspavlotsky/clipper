@@ -1,0 +1,446 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Clipper</title>
+<style>
+:root{--bg:#0f0f11;--panel:#17171a;--panel2:#202024;--line:#2a2a30;--text:#ececef;--mut:#8a8a94;--acc:#76b900;--accH:#86d100;--sel:#ffc83d;--err:#ff6b6b}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;user-select:none;overflow:hidden}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+button:hover{background:#2a2a30;border-color:#3a3a42}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--acc);border-color:var(--acc);color:#0b0b0b;font-weight:600;padding:7px 18px}
+button.primary:hover:not(:disabled){background:var(--accH)}
+kbd{font:11px/1 Consolas,monospace;color:var(--mut);border:1px solid var(--line);border-radius:4px;padding:2px 4px}
+.primary kbd{color:#0b0b0baa;border-color:#0b0b0b40}
+select,input{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 8px;outline:none}
+select:focus,input:focus{border-color:#4a4a54}
+select:disabled{opacity:.45}
+input[type=number]{width:64px}
+label{display:inline-flex;align-items:center;gap:6px;color:var(--mut)}
+label select,label input{color:var(--text)}
+.mono{font-family:"Cascadia Mono",Consolas,monospace;font-variant-numeric:tabular-nums}
+.sp{flex:1}
+.mut{color:var(--mut)}
+.warn{color:var(--sel)}
+.err{color:var(--err)}
+.ok{color:var(--acc)}
+svg{width:14px;height:14px;fill:currentColor;flex:none}
+
+#empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.drop{width:min(560px,86vw);aspect-ratio:16/9;border:2px dashed #34343c;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover{border-color:var(--acc);background:#76b9000a}
+.drop svg{width:44px;height:44px;fill:#4a4a54}
+.drop h1{margin:0;font-size:20px;font-weight:600}
+.drop p{margin:0;color:var(--mut)}
+
+#app{height:100%;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+#fname{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+main{flex:1;min-height:0;position:relative;background:#000}
+video,#scrub{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#scrub{pointer-events:none}
+#vmsg{position:absolute;left:0;right:0;bottom:16px;text-align:center;color:var(--mut)}
+#ctrl{background:var(--panel);border-top:1px solid var(--line);padding:10px 26px 12px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;align-items:center;gap:10px;min-height:32px}
+#play{width:40px;justify-content:center;padding:7px 0}
+#selInfo{color:var(--sel)}
+.inout{color:var(--sel)}
+
+#tl{position:relative;height:60px;margin:6px 0 2px;border-radius:6px;background:#0a0a0c;cursor:pointer;touch-action:none}
+#strip{position:absolute;inset:0;width:100%;height:100%;border-radius:6px}
+.dim{position:absolute;top:0;bottom:0;background:#000000b8;pointer-events:none}
+#dimL{left:0;border-radius:6px 0 0 6px}
+#dimR{right:0;border-radius:0 6px 6px 0}
+#sel{position:absolute;top:-2px;bottom:-2px;border-top:3px solid var(--sel);border-bottom:3px solid var(--sel);pointer-events:none}
+/* Handles take pointer events (they bubble to #tl) because at the very start/end they sit outside the
+   timeline's box; ::before widens the grab area beyond the visible tab */
+.h{position:absolute;top:-2px;bottom:-2px;width:12px;background:var(--sel);cursor:ew-resize}
+.h::before{content:"";position:absolute;top:-6px;bottom:-6px;left:-8px;right:-8px}
+.h::after{content:"";position:absolute;left:5px;top:50%;width:2px;height:18px;margin-top:-9px;background:#0007;border-radius:1px}
+#hIn{transform:translateX(-12px);border-radius:5px 0 0 5px}
+#hOut{border-radius:0 5px 5px 0}
+#ph{position:absolute;top:-8px;bottom:-4px;width:2px;margin-left:-1px;background:#fff;pointer-events:none;box-shadow:0 0 3px #000}
+#ph::before{content:"";position:absolute;top:0;left:-5px;border:6px solid transparent;border-top-color:#fff}
+
+#est{font-size:14px;white-space:nowrap}
+#est b{font-weight:600}
+.bar{flex:1;height:8px;background:var(--panel2);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .25s linear}
+#noteTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+#emptyNote{min-height:20px}
+#dropOverlay{position:fixed;inset:10px;display:none;place-items:center;background:#0f0f11d8;border:3px dashed var(--acc);border-radius:14px;font-size:22px;font-weight:600;pointer-events:none;z-index:9}
+#dropOverlay.on{display:grid}
+</style>
+</head>
+<body>
+
+<div id="empty">
+  <div class="drop" id="dropZone">
+    <svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v2h2V6H4zm14 0v2h2V6h-2zM4 10v4h2v-4H4zm14 0v4h2v-4h-2zM4 16v2h2v-2H4zm14 0v2h2v-2h-2zM9.5 8.5v7l6-3.5z"/></svg>
+    <h1>Drop a video here</h1>
+    <p>or click to open &nbsp;·&nbsp; <kbd>Ctrl+O</kbd></p>
+  </div>
+  <div id="emptyNote"></div>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div id="fname"></div>
+    <div id="meta" class="mut"></div>
+    <span class="sp"></span>
+    <button id="openBtn">Open… <kbd>Ctrl+O</kbd></button>
+  </header>
+  <main><video id="v" preload="auto"></video><img id="scrub" alt="" hidden><div id="vmsg"></div></main>
+  <section id="ctrl">
+    <div class="row">
+      <button id="play" title="Play / pause (Space)">
+        <svg id="icPlay" viewBox="0 0 16 16"><path d="M4 2.5v11l9.5-5.5z"/></svg>
+        <svg id="icPause" viewBox="0 0 16 16" hidden><path d="M3.5 2h3.2v12H3.5zM9.3 2h3.2v12H9.3z"/></svg>
+      </button>
+      <span id="time" class="mono">0:00.00 / 0:00.00</span>
+      <span class="sp"></span>
+      <button id="setIn" class="inout" title="Set start at playhead">[ Start <kbd>I</kbd></button>
+      <span id="selInfo" class="mono"></span>
+      <button id="setOut" class="inout" title="Set end at playhead">End ] <kbd>O</kbd></button>
+    </div>
+    <div id="tl">
+      <canvas id="strip"></canvas>
+      <div class="dim" id="dimL"></div><div class="dim" id="dimR"></div>
+      <div id="sel"></div>
+      <div class="h" id="hIn"></div><div class="h" id="hOut"></div>
+      <div id="ph"></div>
+    </div>
+    <div class="row">
+      <label>Quality
+        <select id="qual">
+          <option value="high">High</option>
+          <option value="good">Good (recommended)</option>
+          <option value="small">Small</option>
+          <option value="size">Fit to size…</option>
+          <option value="copy">Original – no re-encode (instant)</option>
+        </select>
+      </label>
+      <label id="sizeWrap"><input id="sizeMB" type="number" min="1" step="1"> MB</label>
+      <label>Resolution <select id="res"></select></label>
+      <span class="sp"></span>
+      <span id="est"></span>
+      <button id="exportBtn" class="primary">Export <kbd>Enter</kbd></button>
+    </div>
+    <div class="row" id="progRow" hidden>
+      <div class="bar"><i id="barFill"></i></div>
+      <span id="progTxt" class="mono"></span>
+      <button id="cancelBtn">Cancel <kbd>Esc</kbd></button>
+    </div>
+    <div class="row" id="noteRow" hidden>
+      <span id="noteTxt"></span>
+      <span class="sp"></span>
+      <button id="copyBtn" title="Copy the file so you can paste it in Discord, WhatsApp, Explorer…">Copy file</button>
+      <button id="revealBtn">Show in folder</button>
+    </div>
+  </section>
+</div>
+
+<div id="dropOverlay">Drop to open</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const host = window.chrome && window.chrome.webview;
+const send = m => host && host.postMessage(m);
+const v = $('v'), tl = $('tl');
+const BPP = { high: .15, good: .09, small: .045 };   // bits per pixel per frame
+const store = {
+  get: (k, d) => { try { return localStorage.getItem(k) ?? d } catch { return d } },
+  set: (k, x) => { try { localStorage.setItem(k, x) } catch { } },
+};
+let info = null, url = '', inT = 0, outT = 0, busy = false, stopAt = null;
+let loadId = 0, kfs = [];   // storyboard keyframes: { t, img }, sorted by t
+
+const fmt = t => {
+  const cs = Math.round(Math.max(0, t || 0) * 100), m = Math.floor(cs / 6000), s = (cs % 6000) / 100;
+  return m + ':' + (s < 10 ? '0' : '') + s.toFixed(2);
+};
+const fmtB = b => {
+  const M = 1048576;
+  return b >= 1024 * M ? (b / 1024 / M).toFixed(2) + ' GB' : (b / M).toFixed(b < 10 * M ? 1 : 0) + ' MB';
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+$('qual').value = store.get('qual', 'good');
+$('sizeMB').value = store.get('sizeMB', '10');
+
+// ---------- host messages ----------
+const handlers = {
+  loaded(m) {
+    info = m.info; url = m.url; loadId = m.id; kfs = []; shownT = 0; seekTarget = seekIssued = null;
+    $('empty').hidden = true; $('app').hidden = false; $('noteRow').hidden = true; $('vmsg').textContent = '';
+    $('fname').textContent = m.name; $('fname').title = m.path;
+    $('meta').textContent = `${info.width}×${info.height} · ${+info.fps.toFixed(2)} fps · ${info.videoCodec} · ${fmt(info.duration)} · ${fmtB(info.size)}`;
+    const r = $('res'), want = store.get('res', '0');
+    r.innerHTML = '';
+    r.add(new Option(`Original (${info.height}p)`, '0'));
+    for (const h of [1440, 1080, 720, 480]) if (h < info.height) r.add(new Option(h + 'p', h));
+    r.value = [...r.options].some(o => o.value === want) ? want : '0';
+    inT = 0; outT = info.duration; stopAt = null;
+    v.src = url;
+    update();
+    drawStrip();
+  },
+  keyframes(m) {
+    if (m.id !== loadId) return;
+    for (const it of m.items) {
+      const img = new Image();
+      img.onload = queueStrip;
+      img.src = `https://media.clipper/kf/${m.id}/${it.i}.jpg`;
+      kfs.push({ t: it.t, img });
+    }
+  },
+  progress(m) {
+    $('barFill').style.width = (m.p * 100) + '%';
+    $('progTxt').textContent = Math.round(m.p * 100) + '%' + (m.speed ? ' · ' + m.speed : '');
+  },
+  done(m) {
+    endJob();
+    note(`<span class="ok">✓</span> Saved <b>${esc(m.name)}</b> <span class="mut">· ${fmtB(m.size)} · ${m.secs.toFixed(1)}s</span>`, true);
+  },
+  cancelled() { endJob(); note('<span class="mut">Export cancelled</span>') },
+  aborted() { endJob() },   // Save As dialog was dismissed
+  error(m) { endJob(); note(`<span class="err">${esc(m.msg)}</span>`) },
+};
+host && host.addEventListener('message', e => handlers[e.data.type] && handlers[e.data.type](e.data));
+
+function note(html, buttons = false) {
+  if (!info) { $('emptyNote').innerHTML = html; return }
+  $('noteTxt').innerHTML = html;
+  $('copyBtn').hidden = $('revealBtn').hidden = !buttons;
+  $('noteRow').hidden = false;
+}
+
+// ---------- timeline ----------
+function update() {
+  if (!info) return;
+  const d = info.duration, a = inT / d * 100, b = outT / d * 100;
+  $('dimL').style.width = a + '%';
+  $('dimR').style.width = (100 - b) + '%';
+  $('sel').style.left = a + '%'; $('sel').style.width = (b - a) + '%';
+  $('hIn').style.left = a + '%'; $('hOut').style.left = b + '%';
+  $('selInfo').textContent = `${fmt(inT)} → ${fmt(outT)}  (${fmt(outT - inT)})`;
+  estimate();
+}
+
+function nearestKf(t) {
+  let lo = 0, hi = kfs.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (kfs[mid].t < t) lo = mid + 1; else hi = mid }
+  return lo > 0 && t - kfs[lo - 1].t < kfs[lo].t - t ? kfs[lo - 1] : kfs[lo];
+}
+
+// While a seek is still decoding, show the closest storyboard keyframe if it's nearer to the target than
+// the (stale) frame the video is still displaying. The exact frame replaces it as soon as it lands.
+let shownT = 0, scrubSrc = '';
+function updateScrub() {
+  const scrub = $('scrub');
+  let src = '';
+  if (seekTarget == null && !v.seeking) shownT = v.currentTime;
+  else if (kfs.length) {
+    const k = nearestKf(now());
+    if (k.img.complete && k.img.naturalWidth && (v.error || Math.abs(k.t - now()) < Math.abs(shownT - now()) - 0.01)) src = k.img.src;
+  }
+  if (src !== scrubSrc) { scrubSrc = src; scrub.hidden = !src; if (src) scrub.src = src }
+}
+
+let wasPaused = null;
+function tick() {
+  if (info) {
+    if (!v.paused && stopAt != null && v.currentTime >= stopAt) { v.pause(); v.currentTime = stopAt; stopAt = null }
+    updateScrub();
+    $('ph').style.left = (now() / info.duration * 100) + '%';
+    $('time').textContent = fmt(now()) + ' / ' + fmt(info.duration);
+    if (wasPaused !== v.paused) { wasPaused = v.paused; $('icPlay').hidden = !v.paused; $('icPause').hidden = v.paused }
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+function togglePlay() {
+  if (!info) return;
+  if (!v.paused) { v.pause(); return }
+  if (Math.abs(v.currentTime - outT) < 0.05 || v.currentTime >= info.duration - 0.05) v.currentTime = inT;
+  stopAt = v.currentTime < outT - 0.05 ? outT : null;
+  v.play();
+}
+// Coalesced seeking: while a seek is decoding, newer targets just replace the pending one, so dragging
+// shows a steady stream of frames instead of restarting the decode on every mouse move.
+let seekTarget = null, seekIssued = null;
+const now = () => seekTarget ?? v.currentTime;
+function seek(t) {
+  seekTarget = Math.min(info.duration, Math.max(0, t));
+  if (!v.seeking) { seekIssued = seekTarget; v.currentTime = seekTarget }
+}
+v.addEventListener('seeked', () => {
+  shownT = v.currentTime;
+  if (seekTarget != null && seekTarget !== seekIssued) { seekIssued = seekTarget; v.currentTime = seekTarget }
+  else seekTarget = seekIssued = null;
+});
+function setIn() { const t = now(); if (t >= outT - 0.1) outT = info.duration; inT = Math.min(t, outT - 0.1); update() }
+function setOut() { const t = now(); if (t <= inT + 0.1) inT = 0; outT = Math.max(t, inT + 0.1); update() }
+
+function hit(x, w) {
+  const xi = inT / info.duration * w, xo = outT / info.duration * w;
+  const nearIn = x >= xi - 20 && x <= xi + 8, nearOut = x >= xo - 8 && x <= xo + 20;
+  if (nearIn && nearOut) return Math.abs(x - xi) < Math.abs(x - xo) ? 'in' : 'out';
+  return nearIn ? 'in' : nearOut ? 'out' : 'seek';
+}
+tl.addEventListener('pointermove', e => {
+  if (!info || tl.hasPointerCapture(e.pointerId)) return;
+  const r = tl.getBoundingClientRect();
+  tl.style.cursor = hit(e.clientX - r.left, r.width) === 'seek' ? 'pointer' : 'ew-resize';
+});
+tl.addEventListener('pointerdown', e => {
+  if (!info || e.button !== 0) return;
+  tl.setPointerCapture(e.pointerId);
+  const r = tl.getBoundingClientRect();
+  const at = x => Math.min(info.duration, Math.max(0, (x - r.left) / r.width * info.duration));
+  const mode = hit(e.clientX - r.left, r.width);
+  if (mode !== 'seek') v.pause();
+  const move = ev => {
+    const t = at(ev.clientX);
+    if (mode === 'in') { inT = Math.min(t, outT - 0.1); seek(inT); update() }
+    else if (mode === 'out') { outT = Math.max(t, inT + 0.1); seek(outT); update() }
+    else seek(t);
+  };
+  const up = () => { tl.removeEventListener('pointermove', move); tl.removeEventListener('pointerup', up); tl.removeEventListener('pointercancel', up) };
+  move(e);
+  tl.addEventListener('pointermove', move); tl.addEventListener('pointerup', up); tl.addEventListener('pointercancel', up);
+});
+
+// Timeline strip, drawn from the storyboard keyframes (redrawn as more arrive)
+let stripQueued = false;
+const queueStrip = () => { if (!stripQueued) { stripQueued = true; requestAnimationFrame(drawStrip) } };
+function drawStrip() {
+  stripQueued = false;
+  if (!info) return;
+  const c = $('strip'), dpr = devicePixelRatio || 1, W = tl.clientWidth, H = tl.clientHeight;
+  c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+  const ctx = c.getContext('2d');
+  if (!kfs.length) return;
+  const N = Math.max(3, Math.round(W / (H * info.width / info.height))), tw = c.width / N;
+  for (let i = 0; i < N; i++) {
+    const img = nearestKf((i + .5) * info.duration / N).img;
+    if (!img.complete || !img.naturalWidth) continue;
+    const vw = img.naturalWidth, vh = img.naturalHeight, ar = tw / c.height;
+    let sw = vw, sh = vw / ar;
+    if (sh > vh) { sh = vh; sw = vh * ar }
+    ctx.drawImage(img, (vw - sw) / 2, (vh - sh) / 2, sw, sh, Math.round(i * tw), 0, Math.ceil(tw), c.height);
+  }
+}
+addEventListener('resize', queueStrip);
+
+v.addEventListener('error', () => {
+  if (info) $('vmsg').textContent = `Can't preview ${info.videoCodec} here — the timeline and export still work.`;
+});
+v.addEventListener('click', togglePlay);
+
+// ---------- export ----------
+function plan() {
+  const q = $('qual').value, d = outT - inT;
+  const H = +$('res').value || info.height, W = Math.round(info.width * H / info.height / 2) * 2;
+  if (q === 'copy') return { mode: 'copy', vk: 0, ak: 0, height: 0, bytes: info.bitrate / 8 * d, bpp: 1 };
+  let ak = info.audio ? 160 : 0, vk;
+  if (q === 'size') {
+    // decimal MB + 4% margin, so "10 MB" fits under either definition of an upload limit
+    const total = Math.max(1, +$('sizeMB').value || 10) * 8e6 / d / 1000 * 0.96;   // kbps
+    if (ak && total < 2000) ak = 96;
+    vk = Math.floor(total - ak);
+  } else {
+    vk = Math.round(W * H * info.fps * BPP[q] / 1000);
+  }
+  if (info.videoBitrate) vk = Math.min(vk, Math.round(info.videoBitrate / 1000));   // never above the source
+  vk = Math.max(vk, 150);
+  return { mode: 'enc', vk, ak, height: +$('res').value || 0, bytes: (vk + ak) * 1000 / 8 * d, bpp: vk * 1000 / (W * H * info.fps) };
+}
+
+function estimate() {
+  if (!info) return;
+  const q = $('qual').value, p = plan();
+  $('res').disabled = q === 'copy';
+  $('sizeWrap').hidden = q !== 'size';
+  let s = `≈ <b>${fmtB(p.bytes)}</b>`;
+  if (q === 'copy') s += ' <span class="mut">· start snaps to nearest keyframe</span>';
+  else if (p.bpp < 0.035) s += ' <span class="warn">· low bitrate, try a lower resolution</span>';
+  $('est').innerHTML = s;
+}
+
+function doExport() {
+  if (busy || !info) return;
+  const p = plan();
+  busy = true;
+  $('exportBtn').disabled = true;
+  $('noteRow').hidden = true; $('progRow').hidden = false;
+  $('barFill').style.transition = 'none'; $('barFill').style.width = '0';
+  $('barFill').offsetWidth; $('barFill').style.transition = '';
+  $('progTxt').textContent = 'Starting…';
+  v.pause();
+  // The player shows the frame starting at or before inT; ffmpeg keeps frames starting at or after `start`.
+  // Snap start back to that frame's start so the clip begins on exactly the frame you see.
+  const start = Math.max(0, Math.floor(inT * info.fps + 1e-6) / info.fps - 1e-4);
+  send({ cmd: 'export', start, end: outT, mode: p.mode, vk: p.vk, ak: p.ak, height: p.height });
+}
+function endJob() { busy = false; $('exportBtn').disabled = false; $('progRow').hidden = true }
+
+// ---------- wiring ----------
+for (const id of ['qual', 'res', 'sizeMB']) {
+  $(id).addEventListener('input', () => { store.set(id, $(id).value); estimate() });
+  if (id !== 'sizeMB') $(id).addEventListener('change', () => $(id).blur());
+}
+document.querySelectorAll('button').forEach(b => b.addEventListener('mousedown', e => e.preventDefault()));
+$('dropZone').onclick = $('openBtn').onclick = () => send({ cmd: 'open' });
+$('play').onclick = togglePlay;
+$('setIn').onclick = setIn;
+$('setOut').onclick = setOut;
+$('exportBtn').onclick = doExport;
+$('cancelBtn').onclick = () => send({ cmd: 'cancel' });
+$('copyBtn').onclick = () => { send({ cmd: 'copy' }); $('copyBtn').textContent = 'Copied ✓'; setTimeout(() => $('copyBtn').textContent = 'Copy file', 1500) };
+$('revealBtn').onclick = () => send({ cmd: 'reveal' });
+
+addEventListener('keydown', e => {
+  const tag = e.target.tagName;
+  if (e.ctrlKey && e.key.toLowerCase() === 'o') { e.preventDefault(); send({ cmd: 'open' }); return }
+  if (tag === 'INPUT' || tag === 'SELECT') { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); return }
+  if (!info) return;
+  const frame = 1 / (info.fps || 30);
+  switch (e.key) {
+    case ' ': togglePlay(); break;
+    case 'i': case 'I': setIn(); break;
+    case 'o': case 'O': setOut(); break;
+    // ←/→ one frame, Shift 1 s, Ctrl 5 s
+    case 'ArrowLeft': case 'ArrowRight': {
+      const dir = e.key === 'ArrowLeft' ? -1 : 1;
+      if (e.shiftKey || e.ctrlKey) seek(now() + dir * (e.ctrlKey ? 5 : 1));
+      // land 1 ms into the frame: exact boundaries can round down and show the previous frame
+      else { v.pause(); seek((Math.round(now() * info.fps) + dir) / info.fps + 0.001) }
+      break;
+    }
+    case 'Home': seek(inT); break;
+    case 'End': seek(outT); break;
+    case 'Enter': doExport(); break;
+    case 'Escape': if (busy) send({ cmd: 'cancel' }); break;
+    default: return;
+  }
+  e.preventDefault();
+});
+
+let dragDepth = 0;
+addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('dropOverlay').classList.add('on') });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('dropOverlay').classList.remove('on') } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0; $('dropOverlay').classList.remove('on');
+  if (e.dataTransfer.files.length && host) host.postMessageWithAdditionalObjects({ cmd: 'drop' }, e.dataTransfer.files);
+});
+</script>
+</body>
+</html>
